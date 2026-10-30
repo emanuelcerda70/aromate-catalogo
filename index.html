@@ -331,7 +331,7 @@ body.ch .cur-ring{width:54px;height:54px;border-color:var(--gold);opacity:.3}
     <img src="./img/logo.png" alt="Logo" class="hero-logo" onerror="this.style.display='none'">
     <div class="hero-brand">Catálogo Oficial</div>
     <h1>Aro Mate</h1>
-    <p class="tagline">Mates y artesanías pintados a mano</p>
+    <p class="tagline">Mates y artesan?as pintados a mano</p>
     <div class="chips">
       <span class="chip">🚀 Catálogo Online Actualizado</span>
       <span class="chip">💬 Pedidos Directos a WhatsApp</span>
@@ -474,7 +474,7 @@ body.ch .cur-ring{width:54px;height:54px;border-color:var(--gold);opacity:.3}
 </div>
 
 <script>
-const CSV  = "Aro Mates";
+const CSV  = "https://docs.google.com/spreadsheets/d/1sso210ofplvQyICNnl0WxxOypH5vrweg5L9fqasiKZ0/gviz/tq?tqx=out:csv";
 const IG   = "https://www.instagram.com/aro.mate.25";
 const WA   = "2942410780";
 const SKEY = "carrito_aromate";
@@ -680,13 +680,26 @@ const byName={};
 const PH='https://via.placeholder.com/400x400/ede5d5/8ec87a?text=Foto';
 function prodImg(p){
   if(!p.imagen) return '';
-  if(p.imagen.startsWith('http://') || p.imagen.startsWith('https://')){
-    return p.imagen;
+  const firstImg = String(p.imagen).split(',')[0].trim();
+  if(!firstImg) return '';
+  if(firstImg.startsWith('http://') || firstImg.startsWith('https://')){
+    return firstImg;
   }
-  return `./img/${p.imagen}`;
+  return `./img/${firstImg}`;
 }
 function imgForName(n){const p=byName[n];return p?prodImg(p):''}
-function imgfb(el){el.onerror=null;el.src=PH}
+function imgfb(el){
+  if (!el.dataset.triedApi && el.src && el.src.includes('/img/')) {
+    el.dataset.triedApi = '1';
+    const fname = el.src.split('/img/').pop();
+    if (fname) {
+      el.src = 'https://saas-stock-lxen.onrender.com/static/uploads/' + fname;
+      return;
+    }
+  }
+  el.onerror = null;
+  el.src = PH;
+}
 
 // Pantalla simulada de mantenimiento temporal si el servicio se encuentra pausado
 function mostrarPantallaMantenimiento() {
@@ -738,8 +751,8 @@ async function verificarEstadoTienda() {
 }
 
 // Cache con sessionStorage para carga instantánea (0.05 segundos)
-const SCACHE_KEY = 'MDV_CATALOG_CACHE';
-const SCACHE_TIME = 'MDV_CATALOG_TIME';
+const SCACHE_KEY = 'STOCKO_CATALOG_CACHE_aromate';
+const SCACHE_TIME = 'STOCKO_CATALOG_TIME_aromate';
 const CACHE_TTL = 3 * 60 * 1000; // 3 minutos de validez
 
 async function initCatalogo() {
@@ -771,18 +784,26 @@ function cargarProductos(data) {
   verificarProductoUrl();
 }
 
-function descargarCSV(silent) {
-  Papa.parse(CSV + '&t=' + Date.now(), {
+function descargarCSV(silent, useApiFallback) {
+  const apiCsv = 'https://saas-stock-lxen.onrender.com/api/catalogo_csv?usuario=aromate';
+  const csvFinal = (!useApiFallback && CSV && CSV.startsWith('http')) ? CSV : apiCsv;
+  const sep = csvFinal.includes('?') ? '&' : '?';
+  Papa.parse(csvFinal + sep + 't=' + Date.now(), {
     download: true,
     header: true,
     dynamicTyping: true,
     skipEmptyLines: true,
     complete(r) {
-      sessionStorage.setItem(SCACHE_KEY, JSON.stringify(r.data));
+      const validRows = (r.data || []).filter(row => row && (row.nombre || row.titulo));
+      sessionStorage.setItem(SCACHE_KEY, JSON.stringify(validRows));
       sessionStorage.setItem(SCACHE_TIME, String(Date.now()));
-      cargarProductos(r.data);
+      cargarProductos(validRows);
     },
     error() {
+      if (!useApiFallback && csvFinal !== apiCsv) {
+        descargarCSV(silent, true);
+        return;
+      }
       if (!silent) {
         const loadEl = document.getElementById('loading');
         if (loadEl) loadEl.innerHTML = '<p class="ltxt">No se pudo cargar el catálogo. Por favor intentá recargar la página.</p>';
